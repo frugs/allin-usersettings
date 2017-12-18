@@ -1,0 +1,6 @@
+aiohttp
+aiohttp-jinja2
+aioauth-client
+jinja2
+aiohttp_session[secure]
+pyrebase

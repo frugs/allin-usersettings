@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>All Inspiration User Settings</title>
+
+  <link rel="stylesheet" href="static/styles/main.css">
+  <link rel="icon" href="images/favicon.png">
+</head>
+
+<body>
+
+  <div class="header">
+    <img class="logo" src="static/images/allin_official.png" alt="All Inspiration">
+  </div>
+
+  <h2 class="heading">User Settings</h2>
+
+  <div class="main">
+
+    <div id="welcomeMessage">Welcome back, {{username}}!</div>
+
+    <div id="notYouMessage">
+        <a class="faint" href="{{sign_out_url}}">Not you? Click here to sign out.</a>
+    </div>
+
+    <div id="avatarContainer">
+        <img class="avatar" src="{{discord_avatar}}">
+    </div>
+
+    {% if is_blizzard_account_connected %}
+
+    <div id="battleTagContainer">
+        Congratulations! You've successfully connected your Blizzard account.
+        <div>
+            Your BattleTag: <i>{{battle_tag}}</i>
+        </div>
+    </div>
+
+    <div id="charactersHeadingContainer">
+        <h3 class="subheading">StarCraft II Characters</h3>
+    </div>
+
+    {% if us_characters %}
+
+    <h4 class="subsubheading">AM Server Characters</h4>
+
+    {% for character in us_characters %}
+
+    <div class="character-container">
+      <img class="character-avatar" src="{{character.avatar}}">
+      <div class="character-name-and-clan-container">
+        <div class="character-name">
+          {{character.name}}
+        </div>
+        <div class="character-clan-name">
+          {{character.clan}}
+        </div>
+      </div>
+    </div>
+
+    {% endfor %}
+
+    {% endif %}
+
+    {% if eu_characters %}
+
+    <h4 class="subsubheading">EU Server Characters</h4>
+
+    {% for character in eu_characters %}
+
+    <div class="character-container">
+      <img class="character-avatar" src="{{character.avatar}}">
+      <div class="character-name-and-clan-container">
+        <div class="character-name">
+          {{character.name}}
+        </div>
+        <div class="character-clan-name">
+          {{character.clan}}
+        </div>
+      </div>
+    </div>
+
+    {% endfor %}
+
+    {% endif %}
+    
+    {% if kr_characters %}
+
+    <h4 class="subsubheading">KR Server Characters</h4>
+
+    {% for character in kr_characters %}
+
+    <div class="character-container">
+      <img class="character-avatar" src="{{character.avatar}}">
+      <div class="character-name-and-clan-container">
+        <div class="character-name">
+          {{character.name}}
+        </div>
+        <div class="character-clan-name">
+          {{character.clan}}
+        </div>
+      </div>
+    </div>
+
+    {% endfor %}
+
+    {% endif %}
+
+    <div id="blizzardLogin">
+      <form action="blizzard-login" method="get">
+        <button class="blizzard-login-button">
+          <img class="blizzard-login-logo" src="static/images/battlenet-logo.svg">
+          Missing characters? Reconnect your Blizzard account
+        </button>
+      </form>
+    </div>
+
+    {% else %}
+
+    <div id="blizzardLogin">
+      <form action="blizzard-login" method="get">
+        <button class="blizzard-login-button">
+          <img class="blizzard-login-logo" src="static/images/battlenet-logo.svg">
+          Connect your Blizzard account
+        </button>
+      </form>
+    </div>
+
+    {% endif %}
+
+  </div>
+
+</body>
+
+</html>
