@@ -203,8 +203,8 @@ async def blizzard_authorised(request: aiohttp.web.Request) -> aiohttp.web.Respo
 
     def extract_character_data(character: dict):
         return {
-            "name": character.get("displayName", ""),
-            "clan": character.get("clanName", ""),
+            "name": character.get("displayName", "").encode("ISO-8859-1").decode("utf-8"),
+            "clan": character.get("clanName", "").encode("ISO-8859-1").decode("utf-8"),
             "id": str(character.get("id", 0)),
             "realm": str(character.get("realm", 1)),
             "profile_path": character.get("profilePath", ""),
