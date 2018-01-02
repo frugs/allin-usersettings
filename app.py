@@ -88,13 +88,13 @@ def fetch_from_db(discord_id: str) -> dict:
     db = pyrebase.initialize_app(db_config).database()
     data = db.child("members").child(discord_id).get().val()
 
-    if "battle_tag" in data:
-        result["battle_tag"] = data["battle_tag"]
-    if "characters" in data:
-        result["characters"] = {}
-        for key, value in data["characters"].items():
-            result["characters"][key] = list(value.values())
-
+    if data:
+        if "battle_tag" in data:
+            result["battle_tag"] = data["battle_tag"]
+        if "characters" in data:
+            result["characters"] = {}
+            for key, value in data["characters"].items():
+                result["characters"][key] = list(value.values())
     return result
 
 
