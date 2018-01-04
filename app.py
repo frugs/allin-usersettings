@@ -122,6 +122,9 @@ def fetch_from_db(discord_id: str) -> dict:
             result["characters"] = {}
             for key, value in data["characters"].items():
                 result["characters"][key] = list(value.values())
+        if "connections" in data:
+            result["connections"] = data["connections"]
+
     return result
 
 
@@ -172,28 +175,28 @@ async def index(request: aiohttp.web.Request) -> Union[dict, aiohttp.web.Respons
                 return aiohttp.web.HTTPFound(SSO_LOGOUT_URL)
 
             resp3 = await DISCORD.request('GET', 'users/@me/connections', headers = discord_auth_headers(access_token))
-            if resp3.status == 200:
-                connections = await resp3.json()
-            else:
-                connections = []
+            connections = (await resp3.json()) if resp3.status == 200 else []
 
             await asyncio.get_event_loop().run_in_executor(
                 None, connect_discord, discord_id, member_data, connections)
 
-
             db_data = await asyncio.get_event_loop().run_in_executor(None, fetch_from_db, discord_id)
 
             is_blizzard_account_connected = "battle_tag" in db_data and "characters" in db_data
+            twitch_connection = db_data.get("connections", {}).get("twitch", {})
+            is_twitch_account_connected = bool(twitch_connection.get("name", ""))
 
             return {
                 "username": discord_data['username'],
                 "discord_avatar": discord_avatar,
                 "sign_out_url": SSO_LOGOUT_URL,
                 "is_blizzard_account_connected": is_blizzard_account_connected,
+                "is_twitch_account_connected": is_twitch_account_connected,
                 "battle_tag": db_data.get("battle_tag", ""),
                 "eu_characters": db_data.get("characters", {}).get("eu", []),
                 "us_characters": db_data.get("characters", {}).get("us", []),
-                "kr_characters": db_data.get("characters", {}).get("kr", [])
+                "kr_characters": db_data.get("characters", {}).get("kr", []),
+                "twitch_connection": twitch_connection,
             }
 
     return aiohttp.web.HTTPFound(SSO_LOGIN_URL)

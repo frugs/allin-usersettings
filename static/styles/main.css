@@ -113,3 +113,16 @@ a.faint, a.faint:hover {
   font-family: "Blizzard-Light";
   src: url("https://eu.battle.net/support/static/fonts/blizzard-light.32debac7.woff") format("woff");
 }
+
+.twitch-avatar {
+  margin: 0.5em 1em;
+  border-radius: 5%;
+  border: 5px solid black;
+  box-shadow: 5px 5px 5px rgba(0, 0, 0, .25), -5px 5px 5px rgba(0, 0, 0, .25);
+  width: 90px;
+  height: 90px;
+  display: inline-block;
+  vertical-align: middle;
+  text-align: left;
+  background: #6441A4;
+}
