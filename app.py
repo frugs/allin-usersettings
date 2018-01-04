@@ -1,6 +1,8 @@
 """This is the single sign-on app"""
 
 import asyncio
+import base64
+import gzip
 import ssl
 import os
 import pickle
@@ -30,6 +32,8 @@ BLIZZARD_CALLBACK_URL = os.getenv("BLIZZARD_CALLBACK_URL")
 
 DISCORD = aioauth_client.OAuth2Client("", "", base_url='https://discordapp.com/api/v6/')
 
+FIREBASE_CONFIG = os.getenv("FIREBASE_CONFIG")
+
 
 def blizzard_eu():
     return aioauth_client.OAuth2Client(
@@ -58,11 +62,28 @@ def blizzard_kr():
         access_token_url="https://kr.battle.net/oauth/token")
 
 
-def update_db(discord_id: str, battle_tag: str, eu_chars: list, us_chars: list, kr_chars: list):
-    with open("firebase.cfg", "rb") as file:
-        db_config = pickle.load(file)
+def connect_discord(discord_id: str, member_data: dict, connections: list):
+    db = create_db_connection()
+    db.child("members").child(discord_id).update({
+        "discord_display_name": member_data.get("nick", ""),
+        "discord_server_nick": member_data.get("nick", "")
+    })
 
-    db = pyrebase.initialize_app(db_config).database()
+    user_connections = {}
+
+    twitch_connection = next((x for x in connections if x.get("type", "") == "twitch"), default={})
+    if twitch_connection:
+        user_connections["twitch"] = {
+            "name": twitch_connection.get("name", ""),
+            "id": twitch_connection.get("id", "")
+        }
+
+    if user_connections:
+        db.child("members").child(discord_id).child("connections").set(user_connections)
+
+
+def connect_blizzard(discord_id: str, battle_tag: str, eu_chars: list, us_chars: list, kr_chars: list):
+    db = create_db_connection()
     db.child("members").child(discord_id).update({
         "battle_tag": battle_tag,
         "caseless_battle_tag": battle_tag.casefold()
@@ -77,6 +98,11 @@ def update_db(discord_id: str, battle_tag: str, eu_chars: list, us_chars: list, 
             "us": dict((char_key(char), char) for char in us_chars),
             "kr": dict((char_key(char), char) for char in kr_chars)
         })
+
+
+def create_db_connection():
+    db_config = pickle.loads(gzip.decompress(base64.b64decode(FIREBASE_CONFIG)))
+    return pyrebase.initialize_app(db_config).database()
 
 
 def fetch_from_db(discord_id: str) -> dict:
@@ -134,6 +160,25 @@ async def index(request: aiohttp.web.Request) -> Union[dict, aiohttp.web.Respons
 
             discord_id = discord_data['id']
             discord_avatar = "https://cdn.discordapp.com/avatars/{}/{}".format(discord_id, discord_data['avatar'])
+
+            resp2 = await DISCORD.request(
+                'GET',
+                '/guilds/154861527906779136/members/' + discord_id,
+                headers=discord_auth_headers(access_token))
+            if resp2.status == 200:
+                member_data = await resp2.json()
+            else:
+                return aiohttp.web.HTTPFound(SSO_LOGOUT_URL)
+
+            resp3 = await DISCORD.request('GET', '/users/@me/connections', headers = discord_auth_headers(access_token))
+            if resp3.status == 200:
+                connections = await resp3.json()
+            else:
+                connections = []
+
+            await asyncio.get_event_loop().run_in_executor(
+                None, connect_discord, discord_id, member_data, connections)
+
 
             db_data = await asyncio.get_event_loop().run_in_executor(None, fetch_from_db, discord_id)
 
@@ -244,7 +289,7 @@ async def blizzard_authorised(request: aiohttp.web.Request) -> aiohttp.web.Respo
 
     await asyncio.get_event_loop().run_in_executor(
         None,
-        update_db,
+        connect_blizzard,
         discord_id,
         battle_tag,
         eu_characters,
