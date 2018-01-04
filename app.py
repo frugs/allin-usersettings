@@ -31,6 +31,7 @@ BLIZZARD_CLIENT_SECRET = os.getenv("BLIZZARD_CLIENT_SECRET")
 BLIZZARD_CALLBACK_URL = os.getenv("BLIZZARD_CALLBACK_URL")
 
 DISCORD = aioauth_client.OAuth2Client("", "", base_url='https://discordapp.com/api/v6/')
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 FIREBASE_CONFIG = os.getenv("FIREBASE_CONFIG")
 
@@ -71,7 +72,7 @@ def connect_discord(discord_id: str, member_data: dict, connections: list):
 
     user_connections = {}
 
-    twitch_connection = next((x for x in connections if x.get("type", "") == "twitch"), default={})
+    twitch_connection = next((x for x in connections if x.get("type", "") == "twitch"), {})
     if twitch_connection:
         user_connections["twitch"] = {
             "name": twitch_connection.get("name", ""),
@@ -163,14 +164,14 @@ async def index(request: aiohttp.web.Request) -> Union[dict, aiohttp.web.Respons
 
             resp2 = await DISCORD.request(
                 'GET',
-                '/guilds/154861527906779136/members/' + discord_id,
-                headers=discord_auth_headers(access_token))
+                'guilds/154861527906779136/members/' + discord_id,
+                headers={'Authorization': 'Bot ' + BOT_TOKEN})
             if resp2.status == 200:
                 member_data = await resp2.json()
             else:
                 return aiohttp.web.HTTPFound(SSO_LOGOUT_URL)
 
-            resp3 = await DISCORD.request('GET', '/users/@me/connections', headers = discord_auth_headers(access_token))
+            resp3 = await DISCORD.request('GET', 'users/@me/connections', headers = discord_auth_headers(access_token))
             if resp3.status == 200:
                 connections = await resp3.json()
             else:
