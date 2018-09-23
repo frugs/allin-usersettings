@@ -1,6 +1,6 @@
-aiohttp
-aiohttp-jinja2
-aioauth-client
-jinja2
-aiohttp_session[secure]
+requests>=2.19.1
+requests-toolbelt>=0.8.0
+flask
+google-cloud-datastore
+Flask-OAuthlib
 pyrebase
