@@ -1,9 +1,13 @@
 """This is the single sign-on app"""
 import json
+import os
+
+import allinsso
 import flask
 import flask_oauthlib.client
 import pyrebase
 import requests
+import base64
 
 from google.cloud import datastore
 
@@ -13,9 +17,14 @@ def retrieve_config_value(key: str) -> str:
     return datastore_client.get(datastore_client.key("Config", key))["value"]
 
 
+DEBUG = os.getenv("DEBUG", "false").casefold() == "true".casefold()
 SECRET_KEY = retrieve_config_value("cookieEncryptionKey")
-BLIZZARD_CLIENT_KEY = retrieve_config_value("blizzardClientKey")
-BLIZZARD_CLIENT_SECRET = retrieve_config_value("blizzardClientSecret")
+DISCORD_CLIENT_KEY = retrieve_config_value("discordClientKey")
+DISCORD_CLIENT_SECRET = retrieve_config_value("discordClientSecret")
+BLIZZARD_CLIENT_KEY = os.getenv("BLIZZARD_CLIENT_KEY") if DEBUG else retrieve_config_value(
+    "blizzardClientKey")
+BLIZZARD_CLIENT_SECRET = os.getenv("BLIZZARD_CLIENT_SECRET") if DEBUG else retrieve_config_value(
+    "blizzardClientSecret")
 BOT_TOKEN = retrieve_config_value("discordBotToken")
 FIREBASE_CONFIG = json.loads(retrieve_config_value("firebaseConfig"))
 SSO_REFRESH_TOKEN_URL = "sso/discord-refresh-token"
@@ -28,19 +37,7 @@ app.config["SESSION_COOKIE_HTTPONLY"] = True
 
 oauth = flask_oauthlib.client.OAuth(app)
 
-discord = oauth.remote_app(
-    "discord",
-    consumer_key=" ",
-    consumer_secret=" ",
-    request_token_params={"scope": "identify connections"},
-    base_url="https://discordapp.com/api/v6/",
-    request_token_url=None,
-    access_token_method='POST',
-    access_token_url="https://discordapp.com/api/oauth2/token",
-    authorize_url="https://discordapp.com/api/oauth2/authorize",
-    access_token_headers={
-        "User-Agent": "Mozilla/5.0"
-    })
+discord = allinsso.create_discord_remote_app(oauth, DISCORD_CLIENT_KEY, DISCORD_CLIENT_SECRET)
 
 
 def blizzard_oauth(region: str) -> flask_oauthlib.client.OAuthRemoteApp:
@@ -54,8 +51,14 @@ def blizzard_oauth(region: str) -> flask_oauthlib.client.OAuthRemoteApp:
         access_token_url="https://{}.battle.net/oauth/token".format(region),
         access_token_method='POST',
         access_token_headers={
-            "User-Agent": "Mozilla/5.0"
-        })
+            "User-Agent":
+                "Mozilla/5.0",
+            "Authorization":
+                "Basic " + base64.b64encode("{}:{}".format(
+                    BLIZZARD_CLIENT_KEY, BLIZZARD_CLIENT_SECRET).encode()).decode()
+        },
+        access_token_params={"scope": "sc2.profile"},
+    )
 
 
 blizzard_eu = blizzard_oauth("eu")
@@ -129,27 +132,11 @@ def discord_auth_headers(access_token: str) -> dict:
     return {'Authorization': "Bearer " + access_token, "User-Agent": "Mozilla/5.0"}
 
 
-def refresh_discord_token() -> str:
-    resp = requests.post(
-        flask.request.host_url + SSO_REFRESH_TOKEN_URL,
-        json={
-            "discord_refresh_token": flask.session.get("discord_refresh_token", "")
-        })
-
-    if resp.status_code == 200:
-        refresh_token_data = resp.json()
-        access_token = refresh_token_data.get("discord_access_token", "")
-        flask.session["discord_refresh_token"] = refresh_token_data.get("discord_refresh_token", "")
-        return access_token
-    else:
-        return ""
-
-
 @app.route("/")
 def index():
     """This is the main landing page for the app"""
 
-    access_token = refresh_discord_token()
+    access_token = allinsso.refresh_discord_token(discord, flask.session)
 
     if not access_token:
         return flask.redirect(SSO_LOGIN_URL)
@@ -217,27 +204,28 @@ def blizzard_login():
 def blizzard_authorised():
     """This is the endpoint for the oauth2 callback for the Blizzard API"""
 
-    resp = blizzard_us.authorized_response()
-    if resp is None or "access_token" not in resp.data is None:
+    blizzard_resp_data = blizzard_us.authorized_response()
+    if not blizzard_resp_data or "access_token" not in blizzard_resp_data is None:
         return "Login failed", 401
 
-    blizzard_access_token = resp.data["access_token"]
+    blizzard_access_token = blizzard_resp_data["access_token"]
 
-    discord_access_token = refresh_discord_token()
+    discord_access_token = allinsso.refresh_discord_token(discord, flask.session)
 
     if not discord_access_token:
-        return flask.redirect(index.__name__)
+        return flask.redirect(flask.url_for(index.__name__))
 
-    discord_resp = discord.get("users/@me", headers=discord_auth_headers(discord_access_token))
+    discord_resp = discord.get(
+        "users/@me", headers=discord_auth_headers(discord_access_token), token=discord_access_token)
     if discord_resp.status != 200 or "id" not in discord_resp.data:
-        return flask.redirect(index.__name__)
+        return flask.redirect(flask.url_for(index.__name__))
 
     discord_data = discord_resp.data
     discord_id = discord_data["id"]
 
     user_resp = blizzard_us.get("account/user", token=blizzard_access_token)
-    if user_resp.status != 200 or not user_resp.data or not user_resp.get("battletag", ""):
-        return flask.redirect(index.__name__)
+    if user_resp.status != 200 or not user_resp.data or not user_resp.data.get("battletag", ""):
+        return flask.redirect(flask.url_for(index.__name__))
 
     user_data = user_resp.data
     battle_tag = user_data["battletag"]
@@ -272,7 +260,7 @@ def blizzard_authorised():
         ])
 
     kr_profile_resp = blizzard_kr.get("sc2/profile/krer", token=blizzard_access_token)
-    if kr_profile_resp.statkr == 200 and kr_profile_resp.data:
+    if kr_profile_resp.status == 200 and kr_profile_resp.data:
         kr_characters.extend([
             extract_character_data(character)
             for character in kr_profile_resp.data.get("characters", [])
@@ -280,4 +268,4 @@ def blizzard_authorised():
 
     connect_blizzard(discord_id, battle_tag, eu_characters, us_characters, kr_characters)
 
-    return flask.redirect(index.__name__)
+    return flask.redirect(flask.url_for(index.__name__))

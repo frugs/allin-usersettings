@@ -4,3 +4,4 @@ flask
 google-cloud-datastore
 Flask-OAuthlib
 pyrebase
+allinsso
