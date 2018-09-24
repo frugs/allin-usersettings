@@ -197,7 +197,7 @@ def blizzard_login():
     """This is the endpoint to direct the client to start the oauth2 dance for the Blizzard API"""
 
     return blizzard_us.authorize(
-        callback=flask.url_for(blizzard_authorised.__name__, _external=True))
+        callback=flask.url_for(blizzard_authorised.__name__, _external=True, _scheme="https"))
 
 
 @app.route("/blizzard-authorised")
