@@ -46,7 +46,7 @@ def blizzard_oauth(region: str) -> flask_oauthlib.client.OAuthRemoteApp:
         request_token_params={"scope": "sc2.profile"},
         consumer_key=BLIZZARD_CLIENT_KEY,
         consumer_secret=BLIZZARD_CLIENT_SECRET,
-        base_url="https://{}.api.battle.net/".format(region),
+        base_url="https://{}.api.blizzard.com/".format(region),
         authorize_url="https://{}.battle.net/oauth/authorize".format(region),
         access_token_url="https://{}.battle.net/oauth/token".format(region),
         access_token_method='POST',
@@ -259,7 +259,7 @@ def blizzard_authorised():
             for character in us_profile_resp.data.get("characters", [])
         ])
 
-    kr_profile_resp = blizzard_kr.get("sc2/profile/krer", token=blizzard_access_token)
+    kr_profile_resp = blizzard_kr.get("sc2/profile/user", token=blizzard_access_token)
     if kr_profile_resp.status == 200 and kr_profile_resp.data:
         kr_characters.extend([
             extract_character_data(character)
