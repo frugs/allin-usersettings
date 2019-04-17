@@ -90,12 +90,14 @@ def connect_discord(discord_id: str, member_data: dict, connections: list):
 
 
 def connect_blizzard(
-    discord_id: str, battle_tag: str, eu_chars: list, us_chars: list, kr_chars: list
+    discord_id: str, blizzard_account_id: str, battle_tag: str, eu_chars: list, us_chars: list,
+    kr_chars: list
 ):
     db = create_db_connection()
     db.child("members").child(discord_id).update(
         {
             "battle_tag": battle_tag,
+            "blizzard_account_id": blizzard_account_id,
             "caseless_battle_tag": battle_tag.casefold()
         }
     )
@@ -103,14 +105,13 @@ def connect_blizzard(
     def char_key(char: dict) -> str:
         return char["id"] + "-" + char["realm"] + "-" + char["name"]
 
-    if eu_chars or us_chars or kr_chars:
-        db.child("members").child(discord_id).child("characters").update(
-            {
-                "eu": dict((char_key(char), char) for char in eu_chars),
-                "us": dict((char_key(char), char) for char in us_chars),
-                "kr": dict((char_key(char), char) for char in kr_chars)
-            }
-        )
+    char_ref = db.child("members").child(discord_id).child("characters")
+    for char in eu_chars:
+        char_ref.child("eu").child(char_key(char)).update(char)
+    for char in us_chars:
+        char_ref.child("us").child(char_key(char)).update(char)
+    for char in kr_chars:
+        char_ref.child("kr").child(char_key(char)).update(char)
 
 
 def create_db_connection():
@@ -235,55 +236,61 @@ def blizzard_authorised():
     discord_data = discord_resp.data
     discord_id = discord_data["id"]
 
-    user_resp = blizzard_us.get("account/user", token=blizzard_access_token)
-    if user_resp.status != 200 or not user_resp.data or not user_resp.data.get("battletag", ""):
+    user_resp = blizzard_us.get("https://us.battle.net/oauth/userinfo", token=blizzard_access_token)
+    if user_resp.status != 200 or not user_resp.data:
         return flask.redirect(flask.url_for(index.__name__))
 
     user_data = user_resp.data
-    battle_tag = user_data["battletag"]
+    if not user_data.get("battletag", "") or not user_data.get("id", ""):
+        return flask.redirect(flask.url_for(index.__name__))
 
-    def extract_character_data(character: dict):
-        return {
-            "name": character.get("displayName", ""),
-            "clan": character.get("clanName", ""),
-            "id": str(character.get("id", 0)),
-            "realm": str(character.get("realm", 1)),
-            "profile_path": character.get("profilePath", ""),
-            "avatar": character.get("avatar", {}).get("url", "")
-        }
+    battle_tag = user_data["battletag"]
+    account_id = str(user_data["id"])
 
     eu_characters = []
     us_characters = []
     kr_characters = []
 
-    eu_profile_resp = blizzard_eu.get("sc2/profile/user", token=blizzard_access_token)
-    if eu_profile_resp.status == 200 and eu_profile_resp.data:
-        eu_profile_data = eu_profile_resp.data
-        eu_characters.extend(
-            [
-                extract_character_data(character)
-                for character in eu_profile_data.get("characters", [])
-            ]
-        )
+    player_resp = blizzard_us.get("sc2/player/" + account_id, token=blizzard_access_token)
+    if player_resp.status != 200 or not player_resp.data:
+        return flask.redirect(flask.url_for(index.__name__))
 
-    us_profile_resp = blizzard_us.get("sc2/profile/user", token=blizzard_access_token)
-    if us_profile_resp.status == 200 and us_profile_resp.data:
-        us_characters.extend(
-            [
-                extract_character_data(character)
-                for character in us_profile_resp.data.get("characters", [])
-            ]
-        )
+    for player_character in player_resp.data:
+        character_name = player_character.get("name", "")
+        profile_id = player_character.get("profileId", 0)
+        realm_id = player_character.get("realmId", 0)
+        region_id = player_character.get("regionId", 0)
+        avatar = player_character.get("avatarUrl", "")
 
-    kr_profile_resp = blizzard_kr.get("sc2/profile/user", token=blizzard_access_token)
-    if kr_profile_resp.status == 200 and kr_profile_resp.data:
-        kr_characters.extend(
-            [
-                extract_character_data(character)
-                for character in kr_profile_resp.data.get("characters", [])
-            ]
+        profile_resp = blizzard_us.get(
+            "sc2/profile/{}/{}/{}".format(region_id, realm_id, profile_id),
+            token=blizzard_access_token
         )
+        if profile_resp.status != 200 or not profile_resp.data:
+            continue
 
-    connect_blizzard(discord_id, battle_tag, eu_characters, us_characters, kr_characters)
+        summary = profile_resp.data.get("summary", {})
+        clan = summary.get("clanName", "")
+
+        character_data = {
+            "name": character_name,
+            "clan": clan,
+            "id": str(profile_id),
+            "realm": str(realm_id),
+            "profile_path": "/profile/{}/{}/{}".format(profile_id, realm_id, character_name),
+            "avatar": avatar,
+            "region_id": str(region_id),
+        }
+
+        if region_id == 1:
+            us_characters.append(character_data)
+        elif region_id == 2:
+            eu_characters.append(character_data)
+        elif region_id == 3:
+            kr_characters.append(character_data)
+
+    connect_blizzard(
+        discord_id, account_id, battle_tag, eu_characters, us_characters, kr_characters
+    )
 
     return flask.redirect(flask.url_for(index.__name__))
