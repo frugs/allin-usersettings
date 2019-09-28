@@ -105,13 +105,15 @@ def connect_blizzard(
     def char_key(char: dict) -> str:
         return char["id"] + "-" + char["realm"] + "-" + char["name"]
 
-    char_ref = db.child("members").child(discord_id).child("characters")
+    def char_ref():
+        return db.child("members").child(discord_id).child("characters")
+
     for char in eu_chars:
-        char_ref.child("eu").child(char_key(char)).update(char)
+        char_ref().child("eu").child(char_key(char)).update(char)
     for char in us_chars:
-        char_ref.child("us").child(char_key(char)).update(char)
+        char_ref().child("us").child(char_key(char)).update(char)
     for char in kr_chars:
-        char_ref.child("kr").child(char_key(char)).update(char)
+        char_ref().child("kr").child(char_key(char)).update(char)
 
 
 def create_db_connection():
