@@ -11,9 +11,10 @@ import base64
 
 from google.cloud import datastore
 
+datastore_client = datastore.Client()
+
 
 def retrieve_config_value(key: str) -> str:
-    datastore_client = datastore.Client()
     return datastore_client.get(datastore_client.key("Config", key))["value"]
 
 
